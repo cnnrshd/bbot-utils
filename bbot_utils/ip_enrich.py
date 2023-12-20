@@ -1,5 +1,6 @@
 """Reads a BBOT ndjson file from provided input file, extracts"""
 import argparse
+import asyncio
 import json
 import logging
 import os
@@ -25,14 +26,19 @@ async def fetch_ip(ip: str, minify: bool):
     _logger.info(f"Fetching IP {ip}")
     # Handle no API key
     try:
-        response = await client.get(
-            f"https://api.shodan.io/shodan/host/{ip}",
-            params={
-                "key": SHODAN_API_KEY,
-                "minify": minify,
-            },
-        )
-        return response.json()
+        if SHODAN_API_KEY == "":
+            _logger.warning("No Shodan API key provided.")
+            response = await client.get(f"https://api.shodan.io/shodan/host/{ip}")
+            return response.json()
+        else:
+            response = await client.get(
+                f"https://api.shodan.io/shodan/host/{ip}",
+                params={
+                    "key": SHODAN_API_KEY,
+                    "minify": minify,
+                },
+            )
+            return response.json()
     except Exception as e:
         _logger.error(f"Error fetching IP {ip}: {e}")
         _logger.error(response.text)
@@ -122,7 +128,7 @@ async def main():
         help="Set logging level to INFO.",
     )
     parser.set_defaults(quiet=False)
-    no_api_key = parser.add_argument(
+    parser.add_argument(
         "--no-api-key",
         action="store_true",
         help="Do not use Shodan API key - this may work for some queries.",
@@ -132,11 +138,14 @@ async def main():
         logger.setLevel(logging.DEBUG)
 
     logger.debug(f"{args=}")
-    global SHODAN_API_KEY
-    load_dotenv()
-    SHODAN_API_KEY = os.getenv("SHODAN_API_KEY", "")
-    if SHODAN_API_KEY == "":
-        raise Exception("SHODAN_API_KEY environment variable is not set.")
+    if args.no_api_key:
+        logger.warning("No Shodan API key provided.")
+    else:
+        global SHODAN_API_KEY
+        load_dotenv()
+        SHODAN_API_KEY = os.getenv("SHODAN_API_KEY", "")
+        if SHODAN_API_KEY == "":
+            raise Exception("SHODAN_API_KEY environment variable is not set.")
     # Grab all input data
     input_data: list[dict] = [json.loads(line) for line in args.input]
     # Execute all tasks and collect results
@@ -158,12 +167,8 @@ async def main():
 
 
 def run():
-    import asyncio
-
     asyncio.run(main())
 
 
 if __name__ == "__main__":
-    import asyncio
-
     asyncio.run(main())
