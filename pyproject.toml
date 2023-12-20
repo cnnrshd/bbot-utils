@@ -18,6 +18,7 @@ python = "^3.10"
 python-dotenv = "^1.0.0"
 httpx = "^0.25.0"
 aiometer = "^0.5.0"
+tqdm = "^4.66.1"
 
 [tool.poetry.dev-dependencies]
 # Development dependencies

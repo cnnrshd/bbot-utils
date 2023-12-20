@@ -6,11 +6,12 @@ import logging
 import os
 from dataclasses import dataclass
 from functools import lru_cache
-from sys import stdin, stdout
+from sys import stderr, stdin, stdout
 
 import aiometer
 from dotenv import load_dotenv
 from httpx import AsyncClient
+from tqdm import asyncio as tqdm_asyncio
 
 SHODAN_API_KEY = ""
 logging.basicConfig(
@@ -153,7 +154,24 @@ def parse_args():
         default=1,
         help="Max requests per second, defaults to 1 (Shodan documentation says this is the max speed)",
     )
+    progress_group = parser.add_mutually_exclusive_group(required=False)
+    progress_group.add_argument(
+        "--no-progress",
+        action="store_false",
+        help="Remove progress bar.",
+        default=False,
+        dest="progress",
+    )
+    progress_group.add_argument(
+        "--progress",
+        action="store_true",
+        help="Add progress bar to stderr. Recommend to send output to a file, otherwise the progress bar will be reprinted with each update.",
+        default=False,
+        dest="progress",
+    )
+    parser.set_defaults(progress=False)
     args = parser.parse_args()
+    return args
 
 
 async def main():
@@ -184,13 +202,15 @@ async def main():
         )
         for data in input_data
     ]
-    # Execute tasks
+    # Execute tasks with aiometer for rate limiting
     async with aiometer.amap(
         enrich_wrapper,
         enrich_inputs,
         max_per_second=args.rate,
     ) as results:
-        async for result in results:
+        async for result in tqdm_asyncio.tqdm(
+            results, total=len(enrich_inputs), file=stderr, disable=not args.progress
+        ):
             if result:
                 args.output.write(json.dumps(result) + "\n")
             else:
