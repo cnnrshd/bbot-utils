@@ -1,0 +1,31 @@
+[tool.poetry]
+name = "bbot_utils"
+version = "0.1.0"
+description = "Utilities for working with bbot results."
+authors = ["Connor Shade"]
+license = "MIT"
+
+# Project URLs
+homepage = "https://github.com/cnnrshd/bbot_utils"
+repository = "https://github.com/cnnrshd/bbot_utils"
+
+# Keywords for package search
+keywords = ["bbot", "shodan", "utils"]
+
+[tool.poetry.dependencies]
+# Python version and project dependencies
+python = "^3.10"
+python-dotenv = "^1.0.0"
+httpx = "^0.25.0"
+
+[tool.poetry.dev-dependencies]
+# Development dependencies
+pytest = "^5.2"
+
+[build-system]
+# Build system requirements
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.scripts]
+ip_enrich = 'bbot_utils.ip_enrich:run'
