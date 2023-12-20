@@ -19,6 +19,7 @@ python-dotenv = "^1.0.0"
 httpx = "^0.25.0"
 aiometer = "^0.5.0"
 tqdm = "^4.66.1"
+pydantic = "^2.5.2"
 
 [tool.poetry.dev-dependencies]
 # Development dependencies
@@ -31,3 +32,4 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
 ip_enrich = 'bbot_utils.ip_enrich:run'
+cvss_enrich = 'bbot_utils.cvss_enrich:run'
