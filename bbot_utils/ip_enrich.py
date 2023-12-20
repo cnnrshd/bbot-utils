@@ -1,4 +1,4 @@
-"""Reads a BBOT ndjson file from provided input file, extracts"""
+"""Reads a ndjson file from provided input file, extracts the IP address, and queries Shodan for enrichments"""
 import argparse
 import asyncio
 import json
