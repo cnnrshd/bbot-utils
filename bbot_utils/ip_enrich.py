@@ -4,9 +4,11 @@ import asyncio
 import json
 import logging
 import os
+from dataclasses import dataclass
 from functools import lru_cache
 from sys import stdin, stdout
 
+import aiometer
 from dotenv import load_dotenv
 from httpx import AsyncClient
 
@@ -62,7 +64,19 @@ async def enrich(data: dict, ip_key: str, enrichment_keys: list[str], minify: bo
         _logger.error(f"Error processing line {shodan_data[ip_key]}: {e}")
 
 
-async def main():
+@dataclass
+class EnrichInput:
+    data: dict
+    ip_key: str
+    enrichment_keys: list[str]
+    minify: bool
+
+
+async def enrich_wrapper(enrich_input: EnrichInput):
+    return await enrich(**enrich_input.__dict__)
+
+
+def parse_args():
     parser = argparse.ArgumentParser(
         description="""Reads a ndjson file from provided input file, extracts IP addresses, and queries Shodan
         for additional information about the IP addresses. By default, data is minified. Writes enriched results 
@@ -133,7 +147,17 @@ async def main():
         action="store_true",
         help="Do not use Shodan API key - this may work for some queries.",
     )
+    parser.add_argument(
+        "--rate",
+        type=int,
+        default=1,
+        help="Max requests per second, defaults to 1 (Shodan documentation says this is the max speed)",
+    )
     args = parser.parse_args()
+
+
+async def main():
+    args = parse_args()
     if args.quiet:
         logger.setLevel(logging.WARNING)
     if args.debug:
@@ -150,21 +174,27 @@ async def main():
             raise Exception("SHODAN_API_KEY environment variable is not set.")
     # Grab all input data
     input_data: list[dict] = [json.loads(line) for line in args.input]
-    # Execute all tasks and collect results
-    results = await asyncio.gather(
-        *[
-            enrich(
-                data=data,
-                ip_key=args.ip_key,
-                enrichment_keys=args.enrichment_keys,
-                minify=args.minify,
-            )
-            for data in input_data
-        ]
-    )
-    for result in results:
-        if result:
-            args.output.write(json.dumps(result) + "\n")
+    # Convert to EnrichInput
+    enrich_inputs: list[EnrichInput] = [
+        EnrichInput(
+            data=data,
+            ip_key=args.ip_key,
+            enrichment_keys=args.enrichment_keys,
+            minify=args.minify,
+        )
+        for data in input_data
+    ]
+    # Execute tasks
+    async with aiometer.amap(
+        enrich_wrapper,
+        enrich_inputs,
+        max_per_second=args.rate,
+    ) as results:
+        async for result in results:
+            if result:
+                args.output.write(json.dumps(result) + "\n")
+            else:
+                logger.warning("No result returned for unknown IP - check output")
     await client.aclose()
 
 

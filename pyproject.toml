@@ -17,6 +17,7 @@ keywords = ["bbot", "shodan", "utils"]
 python = "^3.10"
 python-dotenv = "^1.0.0"
 httpx = "^0.25.0"
+aiometer = "^0.5.0"
 
 [tool.poetry.dev-dependencies]
 # Development dependencies
