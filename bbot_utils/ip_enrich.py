@@ -7,6 +7,7 @@ import os
 from dataclasses import dataclass
 from functools import lru_cache
 from sys import stderr, stdin, stdout
+from typing import Callable
 
 import aiometer
 from dotenv import load_dotenv
@@ -32,7 +33,6 @@ async def fetch_ip(ip: str, minify: bool):
         if SHODAN_API_KEY == "":
             _logger.warning("No Shodan API key provided.")
             response = await client.get(f"https://api.shodan.io/shodan/host/{ip}")
-            return response.json()
         else:
             response = await client.get(
                 f"https://api.shodan.io/shodan/host/{ip}",
@@ -41,26 +41,49 @@ async def fetch_ip(ip: str, minify: bool):
                     "minify": minify,
                 },
             )
-            return response.json()
+        return response.json()
     except Exception as e:
         _logger.error(f"Error fetching IP {ip}: {e}")
         _logger.error(response.text)
         return None
 
 
-async def enrich(data: dict, ip_key: str, enrichment_keys: list[str], minify: bool):
+@lru_cache(maxsize=None)
+async def fetch_ip_internetdb(ip: str, *args, **kwargs):
+    """Queries Shodan's InternetDB API for the given IP address"""
+    _logger = logger.getChild("fetch_ip_internetdb")
+    _logger.info(f"Fetching IP {ip}")
+    # Handle no API key
+    try:
+        response = await client.get(f"https://internetdb.shodan.io/{ip}")
+        return response.json()
+    except Exception as e:
+        _logger.error(f"Error fetching IP {ip}: {e}")
+        _logger.error(response.text)
+        return None
+
+
+async def enrich(
+    data: dict,
+    ip_key: str,
+    enrichment_keys: list[str],
+    minify: bool,
+    enrichment_function: Callable,
+):
     """Enriches data with Shodan data"""
     _logger = logger.getChild("enrich")
     ip = data[ip_key]
     try:
-        shodan_data = await fetch_ip(ip.strip(), minify=minify)
+        shodan_data = await enrichment_function(ip.strip(), minify=minify)
         if shodan_data:
             if enrichment_keys == ["all"]:
                 enrichment_keys = shodan_data.keys()
             for key in enrichment_keys:
                 if key in shodan_data:
                     data[key] = shodan_data[key]
-        return data
+            return data
+        _logger.warning(f"No result returned for IP {ip}")
+        return None
     except Exception as e:
         _logger.error(f"Error processing line {shodan_data[ip_key]}: {e}")
 
@@ -71,6 +94,7 @@ class EnrichInput:
     ip_key: str
     enrichment_keys: list[str]
     minify: bool
+    enrichment_function: Callable
 
 
 async def enrich_wrapper(enrich_input: EnrichInput):
@@ -170,6 +194,20 @@ def parse_args():
         dest="progress",
     )
     parser.set_defaults(progress=False)
+    query_group = parser.add_mutually_exclusive_group(required=False)
+    query_group.add_argument(
+        "--internetdb",
+        action="store_true",
+        help="Use Shodan InternetDB API instead of normal API. Does not require a Shodan API key, but data is less complete and only updated weekly.",
+        dest="internetdb",
+    )
+    query_group.add_argument(
+        "--normal",
+        action="store_false",
+        help="Use normal Shodan API instead of InternetDB API.",
+        dest="internetdb",
+    )
+    parser.set_defaults(internetdb=True)
     args = parser.parse_args()
     return args
 
@@ -182,14 +220,22 @@ async def main():
         logger.setLevel(logging.DEBUG)
 
     logger.debug(f"{args=}")
-    if args.no_api_key:
-        logger.warning("No Shodan API key provided.")
+    if not args.internetdb:
+        logger.info("Using normal Shodan API.")
+        query_function = fetch_ip
+        if args.no_api_key:
+            logger.warning(
+                "No Shodan API key provided. This may work for some queries."
+            )
+        else:
+            global SHODAN_API_KEY
+            load_dotenv()
+            SHODAN_API_KEY = os.getenv("SHODAN_API_KEY", "")
+            if SHODAN_API_KEY == "":
+                raise Exception("SHODAN_API_KEY environment variable is not set.")
     else:
-        global SHODAN_API_KEY
-        load_dotenv()
-        SHODAN_API_KEY = os.getenv("SHODAN_API_KEY", "")
-        if SHODAN_API_KEY == "":
-            raise Exception("SHODAN_API_KEY environment variable is not set.")
+        logger.info("Using Shodan InternetDB API.")
+        query_function = fetch_ip_internetdb
     # Grab all input data
     input_data: list[dict] = [json.loads(line) for line in args.input]
     # Convert to EnrichInput
@@ -199,6 +245,7 @@ async def main():
             ip_key=args.ip_key,
             enrichment_keys=args.enrichment_keys,
             minify=args.minify,
+            enrichment_function=query_function,
         )
         for data in input_data
     ]
@@ -213,8 +260,6 @@ async def main():
         ):
             if result:
                 args.output.write(json.dumps(result) + "\n")
-            else:
-                logger.warning("No result returned for unknown IP - check output")
     await client.aclose()
 
 

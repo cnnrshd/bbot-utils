@@ -16,6 +16,7 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 
+logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger("cvss_enrich")
 
 client: httpx.AsyncClient = httpx.AsyncClient()
@@ -194,6 +195,7 @@ async def main():
         global NVD_API_KEY
         NVD_API_KEY = os.environ.get("NVD_API_KEY", "")
     if args.no_api_key or not NVD_API_KEY:
+        logger.warning("No NVD API key provided. This will be slow.")
         args.seconds_per_request = 7
     if args.quiet:
         logger.setLevel(logging.WARNING)
