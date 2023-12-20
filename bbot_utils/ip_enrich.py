@@ -134,6 +134,8 @@ async def main():
         help="Do not use Shodan API key - this may work for some queries.",
     )
     args = parser.parse_args()
+    if args.quiet:
+        logger.setLevel(logging.WARNING)
     if args.debug:
         logger.setLevel(logging.DEBUG)
 
