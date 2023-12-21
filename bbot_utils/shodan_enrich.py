@@ -5,7 +5,6 @@ import json
 import logging
 import os
 from dataclasses import dataclass
-from functools import cache
 from sys import stderr, stdin, stdout
 from typing import Callable
 
@@ -23,7 +22,6 @@ SHODAN_API_KEY = ""
 client = AsyncClient()
 
 
-@cache
 async def fetch_ip(ip: str, minify: bool):
     """Queries Shodan's API for the given IP address"""
     _logger = logger.getChild("fetch_ip")
@@ -48,7 +46,6 @@ async def fetch_ip(ip: str, minify: bool):
         return None
 
 
-@cache
 async def fetch_ip_internetdb(ip: str, *args, **kwargs):
     """Queries Shodan's InternetDB API for the given IP address"""
     _logger = logger.getChild("fetch_ip_internetdb")

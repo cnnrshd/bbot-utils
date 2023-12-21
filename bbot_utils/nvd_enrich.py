@@ -3,7 +3,6 @@ import argparse
 import json
 import logging
 import os
-from functools import cache
 from sys import stderr, stdin, stdout
 from time import sleep
 
@@ -21,7 +20,6 @@ client: httpx.AsyncClient = httpx.AsyncClient()
 NVD_API_KEY = ""
 
 
-@cache
 async def lookup_cve(cve_id: str):
     """Sends a request to NVD to get CVSS data for the given CVE ID"""
     _logger = logger.getChild("lookup_cve")
@@ -205,6 +203,7 @@ async def main():
         args.seconds_per_request = 7
     input_data = [json.loads(line) for line in args.input_file]
     logger.info(f"Enriching {len(input_data)} records")
+    queries: dict[str, dict | None] = {}
     for index, data in enumerate(
         tqdm.tqdm(
             input_data,
@@ -216,7 +215,9 @@ async def main():
         try:
             if args.cve_key in data.keys():
                 # we gain nothing with async here, but useful if nvd updates their rate limiting
-                resp = await lookup_cve(data[args.cve_key])
+                if data[args.cve_key] not in queries.keys():
+                    queries[data[args.cve_key]] = await lookup_cve(data[args.cve_key])
+                resp = queries[data[args.cve_key]]
                 cve_info = parse_response(resp)
                 if cve_info:
                     data.update(cve_info.model_dump())
