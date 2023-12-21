@@ -14,12 +14,12 @@ from dotenv import load_dotenv
 from httpx import AsyncClient
 from tqdm import asyncio as tqdm_asyncio
 
+from bbot_utils.common import logger as base_logger
+
+logger = base_logger.getChild("shodan_enrich")
+
 SHODAN_API_KEY = ""
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-logging.getLogger("httpx").setLevel(logging.WARNING)
-logger = logging.getLogger("ip_enrich")
+
 client = AsyncClient()
 
 
@@ -249,6 +249,7 @@ async def main():
         )
         for data in input_data
     ]
+    logger.info(f"Querying Shodan for {len(enrich_inputs)} IPs")
     # Execute tasks with aiometer for rate limiting
     async with aiometer.amap(
         enrich_wrapper,
@@ -256,7 +257,11 @@ async def main():
         max_per_second=args.rate,
     ) as results:
         async for result in tqdm_asyncio.tqdm(
-            results, total=len(enrich_inputs), file=stderr, disable=not args.progress
+            results,
+            total=len(enrich_inputs),
+            file=stderr,
+            disable=not args.progress,
+            desc="Shodan Enrichment",
         ):
             if result:
                 args.output.write(json.dumps(result) + "\n")

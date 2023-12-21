@@ -12,12 +12,9 @@ import tqdm
 from dotenv import load_dotenv
 from pydantic import BaseModel
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
+from bbot_utils.common import logger as base_logger
 
-logging.getLogger("httpx").setLevel(logging.WARNING)
-logger = logging.getLogger("cvss_enrich")
+logger = base_logger.getChild("nvd_enrich")
 
 client: httpx.AsyncClient = httpx.AsyncClient()
 
@@ -189,22 +186,31 @@ def parse_args():
 
 async def main():
     args = parse_args()
+    if args.quiet:
+        logging.getLogger().setLevel(logging.WARNING)
+    if args.debug:
+        logging.getLogger().setLevel(logging.DEBUG)
+    logger.debug(f"{args=}")
     # Look for API key
     if not args.no_api_key:
         load_dotenv()
         global NVD_API_KEY
         NVD_API_KEY = os.environ.get("NVD_API_KEY", "")
+        if NVD_API_KEY:
+            logger.debug(
+                f"Found NVD API key: {NVD_API_KEY[:4]}{'*' * (len(NVD_API_KEY) - 4)}"
+            )
     if args.no_api_key or not NVD_API_KEY:
         logger.warning("No NVD API key provided. This will be slow.")
         args.seconds_per_request = 7
-    if args.quiet:
-        logger.setLevel(logging.WARNING)
-    if args.debug:
-        logger.setLevel(logging.DEBUG)
     input_data = [json.loads(line) for line in args.input_file]
+    logger.info(f"Enriching {len(input_data)} records")
     for index, data in enumerate(
         tqdm.tqdm(
-            input_data, desc="Processing CVEs", disable=not args.progress, file=stderr
+            input_data,
+            desc="Performing NVD Enrichment",
+            disable=not args.progress,
+            file=stderr,
         )
     ):
         try:
