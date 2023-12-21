@@ -236,6 +236,7 @@ async def main():
     else:
         logger.info("Using Shodan InternetDB API.")
         query_function = fetch_ip_internetdb
+        args.rate = 50
     # Grab all input data
     input_data: list[dict] = [json.loads(line) for line in args.input]
     # Convert to EnrichInput
