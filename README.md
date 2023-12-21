@@ -13,13 +13,13 @@ pipx install git+https://github.com/cnnrshd/bbot-utils.git
 This allows you to simply run:
 
 ```sh
-echo '{"host":"1.1.1.1"}' | ip_enrich -o out.json
-echo '{"cve":"CVE-2022-0001"}' | cvss_enrich -o out.json
+echo '{"host":"1.1.1.1"}' | shodan_enrich -o out.json
+echo '{"cve":"CVE-2022-0001"}' | nvd_enrich -o out.json
 ```
 
 ### Requirements - API keys
 
-cvss_enrich and ip_enrich both support querying without an API key. For `cvss_enrich`, which uses NVD, the query rate is 10x slower. For `ip_enrich`, which uses Shodan, you may get rate-limited since this is potentially not-allowed. Not an isuse if you use the default `--internetdb` search.
+nvd_enrich and shodan_enrich both support querying without an API key. For `nvd_enrich`, which uses NVD, the query rate is 10x slower. For `shodan_enrich`, which uses Shodan, you may get rate-limited since this is potentially not-allowed. Not an isuse if you use the default `--internetdb` search.
 
 ### Requirements - Python Packages
 
@@ -31,16 +31,16 @@ aiometer = "^0.5.0"
 tqdm = "^4.66.1"
 pydantic = "^2.5.2"
 
-## cvss_enrich.py
+## nvd_enrich.py
 
-`cvss_enrich.py` is a Python script that reads a newline-delimited JSON (ndjson) file, extracts CVE IDs, and queries NVD for CVE enrichments. In particular, this extracts cvss v2 and v3 score, exploitability, vector string, and severity.
+`nvd_enrich.py` is a Python script that reads a newline-delimited JSON (ndjson) file, extracts CVE IDs, and queries NVD for CVE enrichments. In particular, this extracts cvss v2 and v3 score, exploitability, vector string, and severity.
 
 ### Usage
 
 Subject to change. Check the `--help` flag.
 
 ```bash
-python cvss_enrich.py [-h] [-i INPUT_FILE] [-o OUTPUT_FILE] [--cve-key CVE_KEY] [--debug] [--quiet | --no-quiet] [--no-api-key] [--seconds-per-request SECONDS_PER_REQUEST] [--no-progress | --progress]
+python nvd_enrich.py [-h] [-i INPUT_FILE] [-o OUTPUT_FILE] [--cve-key CVE_KEY] [--debug] [--quiet | --no-quiet] [--no-api-key] [--seconds-per-request SECONDS_PER_REQUEST] [--no-progress | --progress]
 ```
 
 #### Arguments
@@ -60,7 +60,7 @@ python cvss_enrich.py [-h] [-i INPUT_FILE] [-o OUTPUT_FILE] [--cve-key CVE_KEY] 
 ### Example
 
 ```sh
-echo '{"cve":"CVE-2017-9798"}' | python ./bbot-utils/cvss_enrich.py | jq
+echo '{"cve":"CVE-2017-9798"}' | python ./bbot-utils/nvd_enrich.py | jq
 ```
 
 Expected output:
@@ -79,9 +79,9 @@ Expected output:
 }
 ```
 
-## ip_enrich.py
+## shodan_enrich.py
 
-`ip_enrich.py` is a Python script that reads a newline-delimited JSON (ndjson) file, extracts IP addresses, and queries Shodan for additional information about the IP addresses. The enriched results are then written to an output file.
+`shodan_enrich.py` is a Python script that reads a newline-delimited JSON (ndjson) file, extracts IP addresses, and queries Shodan for additional information about the IP addresses. The enriched results are then written to an output file.
 
 ### Usage
 
@@ -90,7 +90,7 @@ Subject to change. Check the `--help` flag.
 You can run the script from the command line with the following syntax:
 
 ```bash
-python ip_enrich.py [-i INPUT] [-o OUTPUT] [-k IP_KEY] [--enrichment-keys [ENRICHMENT_KEYS ...]] [--minify | --no-minify] [--debug] [--quiet | --no-quiet] [--progress | --no-progress] [--rate RATE] [--no-api-key]
+python shodan_enrich.py [-i INPUT] [-o OUTPUT] [-k IP_KEY] [--enrichment-keys [ENRICHMENT_KEYS ...]] [--minify | --no-minify] [--debug] [--quiet | --no-quiet] [--progress | --no-progress] [--rate RATE] [--no-api-key]
 ```
 
 #### Arguments
@@ -108,7 +108,7 @@ python ip_enrich.py [-i INPUT] [-o OUTPUT] [-k IP_KEY] [--enrichment-keys [ENRIC
 Here's an example of how to use the script if you just clone the repo:
 
 ```bash
-echo '{"host":"1.1.1.1"}' | python ./bbot-utils/ip_enrich.py | jq
+echo '{"host":"1.1.1.1"}' | python ./bbot-utils/shodan_enrich.py | jq
 ```
 
 Expected Output:
@@ -140,14 +140,53 @@ Expected Output:
 }
 ```
 
+## exploitdb_enrich.py
+
+`exploitdb_enrich.py` is a Python script that reads a newline-delimited JSON (ndjson) file, extracts a given search term (by default, it looks for a `cve` key), and queries a local exploit_db database for matching exploits. The enriched results are then written to an output file.
+
+### Usage
+
+Subject to change. Check the `--help` flag.
+
+You can run the script from the command line with the following syntax:
+
+### Example
+
+Here's an example of how to use the script if you just clone the repo:
+
+```bash
+echo '{"cve":"CVE-2021-46360"}' | poetry run exploitdb_enrich
+```
+
+Expected Output:
+
+```json
+{
+  "cve": "CVE-2021-46360",
+  "exploitdb": [
+    {
+      "description": "Composr-CMS Version <=10.0.39 - Authenticated Remote Code Execution",
+      "verified": 1
+    }
+  ]
+}
+```
+
 ## Pipelining
 
-These tools are designed to be pipelined. Starting with just a base IP address, we can find all CVEs and enrich them with NVD, then extract any results that have a CVSS V2 or V3 score greater than 7:
+These tools are designed to be pipelined. Starting with just a base IP address, we can use:
+
+- `shodan_enrich` to get all CVEs for this host
+- `jq` to unpack and rename the vulns key, along with only selecting the first few CVEs for testing purposes
+- `nvd_enrich` to get cvss scores
+- `jq` to filter out any low-ranking cvss V2 or V3 scores
+- `exploitdb_enrich` to look for any CVEs that have a proof-of-concept exploit
 
 ```sh
 echo '{"host": "213.183.57.164"}' \
-| poetry run ip_enrich --enrichment-keys hostnames vulns  \
-| jq -c '{cve : .vulns[1:10][]} + (. | del(.vulns))' \
-| poetry run cvss_enrich --progress --quiet \
-| jq -c 'select((.cvss3_score >= 7) or (.cvss2_score >= 7))' > out.json
+| poetry run shodan_enrich --enrichment-keys hostnames vulns --progress  \
+| jq -c '{cve : .vulns[:10][]} + (. | del(.vulns))' \
+| poetry run nvd_enrich --progress --quiet \
+| jq -c 'select((.cvss3_score >= 7) or (.cvss2_score >= 7))' \
+| poetry run exploitdb_enrich --progress --quiet -o out.json
 ```
