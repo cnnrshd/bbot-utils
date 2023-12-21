@@ -3,7 +3,7 @@ import argparse
 import json
 import logging
 import os
-from functools import lru_cache
+from functools import cache
 from sys import stderr, stdin, stdout
 from time import sleep
 
@@ -21,7 +21,7 @@ client: httpx.AsyncClient = httpx.AsyncClient()
 NVD_API_KEY = ""
 
 
-@lru_cache(maxsize=None)
+@cache
 async def lookup_cve(cve_id: str):
     """Sends a request to NVD to get CVSS data for the given CVE ID"""
     _logger = logger.getChild("lookup_cve")
